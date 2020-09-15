@@ -1630,6 +1630,8 @@ HttpStateData::maybeReadVirginBody()
 size_t
 HttpStateData::maybeMakeSpaceAvailable()
 {
+  const auto readBufferSize = std::max(SQUID_TCP_SO_RCVBUF, static_cast<int>(Config.maxReplyHeaderSize));
+
 // While reading headers we are accumulating data to inBuf.
     // While parsing body data  a small amount of data may remains in inBuf
     // in the case of chunked responses.
