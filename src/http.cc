@@ -1636,6 +1636,20 @@ HttpStateData::maybeMakeSpaceAvailable()
     // While parsing body data  a small amount of data may remains in inBuf
     // in the case of chunked responses.
     size_t readSize = readBufferSize - inBuf.length();
+
+    // We should not be here if buffer is full:
+    //  - While we are receiving headers full buffer should result to "too big headers" error
+    //  - While we are receiving body data, the data are not flushed, so this is means we did not
+    //    correctly compute the buffer space (calcBufferSpaceToReserve method) in the previous
+    //    call of this method
+    Must(readSize);
+
+    if (flags.headers_parsed) {
+        // What we can accept in read buffer based on Config.readAheadGap value:
+        const int totalBytesCanAccept = calcBufferSpaceToReserve(inBuf.spaceSize(), readSize);
+
+        // adjust readSize on what we can accept:
+        readSize = inBuf.length() < (SBuf::size_type)totalBytesCanAccept ? totalBytesCanAccept - inBuf.length() : 0;
     }
 
     if (!readSize) {
