@@ -121,7 +121,7 @@ private:
      * \return whether the buffer can be grown to provide space
      *         regardless of whether the grow actually happened.
      */
-    bool maybeMakeSpaceAvailable(bool grow);
+    size_t maybeMakeSpaceAvailable();
 
     // consuming request body
     virtual void handleMoreRequestBodyAvailable();

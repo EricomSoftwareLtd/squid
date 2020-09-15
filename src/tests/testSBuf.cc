@@ -850,6 +850,47 @@ testSBuf::testReserve()
         buffer.reserve(requirements);
         CPPUNIT_ASSERT(buffer.spaceSize() >= requirements.minSpace);
     }
+        { // MemBlob shiftLeft operation after chop
+        SBuf b(fox);
+        const char * const bBlobStartBefore = b.rawContent();
+        const uint64_t allocations = b.GetStats().cowSlow;
+        b.chop(5);
+        b.reserveSpace(5);
+        CPPUNIT_ASSERT_EQUAL(allocations, b.GetStats().cowSlow); // assure no reallocation
+        const char * const bBlobStartAfter = b.rawContent();
+        CPPUNIT_ASSERT_EQUAL(bBlobStartBefore, bBlobStartAfter); // check no reallocation, but shiftLeft
+        CPPUNIT_ASSERT(b.spaceSize() == 5); // moved left by 5, so released space of size 5
+        SBuf ref(fox + 5);
+        CPPUNIT_ASSERT_EQUAL(ref,b);
+    }
+
+    { // MemBlob crop operations after chop
+        SBuf b(fox);
+        b.chop(4, 10);
+        const auto space = SBuf(fox).length() - static_cast<SBuf::size_type>(14);
+        const char * const bMemBefore = b.rawContent();
+        const uint64_t allocations = b.GetStats().cowSlow;
+        b.reserveSpace(space);
+        CPPUNIT_ASSERT_EQUAL(allocations, b.GetStats().cowSlow); // assure no reallocation
+        const char * const bMemAfter = b.rawContent();
+        CPPUNIT_ASSERT_EQUAL(bMemBefore, bMemAfter); // check no reallocation, or shift
+        CPPUNIT_ASSERT(b.spaceSize() == space);
+    }
+
+    { // MemBlob crop and shiftLeft operations after chop
+        SBuf b(fox);
+        const char * const bBlobStartBefore = b.rawContent();
+        b.chop(b.length() - 5, 2);
+        const auto space = SBuf(fox).length() - static_cast<SBuf::size_type>(2);
+        const uint64_t allocations = b.GetStats().cowSlow;
+        b.reserveSpace(space);
+        CPPUNIT_ASSERT_EQUAL(allocations, b.GetStats().cowSlow); // assure no reallocation
+        const char * const bBlobStartAfter = b.rawContent();
+        CPPUNIT_ASSERT_EQUAL(bBlobStartBefore, bBlobStartAfter); // check no reallocation, but shiftLeft
+        CPPUNIT_ASSERT(b.spaceSize() == space);
+        SBuf ref(fox + (strlen(fox) - 5), 2);
+        CPPUNIT_ASSERT_EQUAL(ref,b);
+    }
 }
 
 void

@@ -1039,8 +1039,10 @@ Client::calcBufferSpaceToReserve(size_t space, const size_t wantSpace) const
 
         if (adaptor_space < space)
             space = adaptor_space;
-    }
+    } else
 #endif
+
+        space = entry->bytesWanted(Range<size_t>(0, space), true);
 
     return space;
 }
