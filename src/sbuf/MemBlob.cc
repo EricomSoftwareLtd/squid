@@ -124,6 +124,18 @@ MemBlob::append(const char *source, const size_type n)
     ++Stats.append;
 }
 
+void
+MemBlob::shiftLeft(const size_type n)
+{
+    Must(n <= size);
+    if (n > 0) {
+        Must(LockCount() <= 1);
+        size -= n;
+        if (size)
+            memmove(mem, mem + n, size);
+    }
+}
+
 const MemBlobStats&
 MemBlob::GetStats()
 {
