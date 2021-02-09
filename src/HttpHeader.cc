@@ -555,7 +555,6 @@ HttpHeader::parse(const char *header_start, size_t hdrLen, Http::ContentLengthIn
             ; // leave header present for chunked() method
         } else if (rawTe.caseCmp("chunked, chunked") == 0) {
             ;// leave header present for chunked() method
-        }
         } else if (rawTe.caseCmp("identity") == 0) { // deprecated. no coding
             delById(Http::HdrType::TRANSFER_ENCODING);
         } else {
