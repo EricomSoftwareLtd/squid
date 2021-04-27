@@ -24,7 +24,7 @@
 #include "comm/Read.h"
 #include "comm/Write.h"
 #include "CommRead.h"
-#include "err_detail_type.h"
+#include "error/Detail.h"
 #include "errorpage.h"
 #include "fd.h"
 #include "fde.h"
@@ -66,15 +66,6 @@
 #if USE_DELAY_POOLS
 #include "DelayPools.h"
 #endif
-
-#define SQUID_ENTER_THROWING_CODE() try {
-#define SQUID_EXIT_THROWING_CODE(status) \
-    status = true; \
-    } \
-    catch (const std::exception &e) { \
-    debugs (11, 1, "Exception error:" << e.what()); \
-    status = false; \
-    }
 
 CBDATA_CLASS_INIT(HttpStateData);
 
@@ -687,6 +678,9 @@ HttpStateData::processReplyHeader()
             hp = new Http1::ResponseParser;
 
         bool parsedOk = hp->parse(inBuf);
+        // remember the actual received status-code before returning on errors,
+        // overwriting any previously stored value from earlier forwarding attempts
+        request->hier.peer_reply_status = hp->messageStatus(); // may still be scNone
 
         // sync the buffers after parsing.
         inBuf = hp->remaining();
@@ -781,8 +775,6 @@ HttpStateData::processReplyHeader()
     checkDateSkew(vrep);
 
     processSurrogateControl (vrep);
-
-    request->hier.peer_reply_status = newrep->sline.status();
 
     ctx_exit(ctx);
 }
@@ -1460,26 +1452,25 @@ HttpStateData::writeReplyBody()
 bool
 HttpStateData::decodeAndWriteReplyBody()
 {
-    const char *data = NULL;
-    int len;
-    bool wasThereAnException = false;
     assert(flags.chunked);
     assert(httpChunkDecoder);
-    SQUID_ENTER_THROWING_CODE();
-    MemBuf decodedData;
-    decodedData.init();
-    httpChunkDecoder->setPayloadBuffer(&decodedData);
-    const bool doneParsing = httpChunkDecoder->parse(inBuf);
-    inBuf = httpChunkDecoder->remaining(); // sync buffers after parse
-    len = decodedData.contentSize();
-    data=decodedData.content();
-    addVirginReplyBody(data, len);
-    if (doneParsing) {
-        lastChunk = 1;
-        flags.do_next_read = false;
+    try {
+        MemBuf decodedData;
+        decodedData.init();
+        httpChunkDecoder->setPayloadBuffer(&decodedData);
+        const bool doneParsing = httpChunkDecoder->parse(inBuf);
+        inBuf = httpChunkDecoder->remaining(); // sync buffers after parse
+        addVirginReplyBody(decodedData.content(), decodedData.contentSize());
+        if (doneParsing) {
+            lastChunk = 1;
+            flags.do_next_read = false;
+        }
+        return true;
     }
-    SQUID_EXIT_THROWING_CODE(wasThereAnException);
-    return wasThereAnException;
+    catch (...) {
+        debugs (11, 2, "de-chunking failure: " << CurrentException);
+    }
+    return false;
 }
 
 /**
@@ -2629,7 +2620,8 @@ HttpStateData::handleRequestBodyProducerAborted()
         // should not matter because either client-side will provide its own or
         // there will be no response at all (e.g., if the the client has left).
         const auto err = new ErrorState(ERR_ICAP_FAILURE, Http::scInternalServerError, fwd->request, fwd->al);
-        err->detailError(ERR_DETAIL_SRV_REQMOD_REQ_BODY);
+        static const auto d = MakeNamedErrorDetail("SRV_REQMOD_REQ_BODY");
+        err->detailError(d);
         fwd->fail(err);
     }
 
